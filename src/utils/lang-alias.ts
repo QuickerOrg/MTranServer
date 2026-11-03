@@ -43,7 +43,8 @@ const languageAliases: Record<string, string> = {
   'ko-kr': 'ko',
   'kr': 'ko',
   'ru-ru': 'ru',
-  'nb': 'no',
+  'nb': 'nb',
+  'no': 'nb',
 };
 
 export function NormalizeLanguageCode(code: string): string {
