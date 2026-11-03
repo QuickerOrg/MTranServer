@@ -10,9 +10,10 @@ export class GenerationLimitError extends Error {
   constructor() { super('Translation exceeded generation limit'); this.name = 'GenerationLimitError'; }
 }
 
-interface GenerationRecovery { remainingAttempts: number }
+interface GenerationRecovery { remainingAttempts: number; completed: Map<string, string> }
 const MAX_RECOVERY_DEPTH = 6;
 const MAX_RECOVERY_ATTEMPTS = 64;
+const newGenerationRecovery = (): GenerationRecovery => ({ remainingAttempts: MAX_RECOVERY_ATTEMPTS, completed: new Map() });
 
 function splitForRecovery(text: string): [string, string] | undefined {
   for (const granularity of ['sentence', 'word', 'grapheme'] as const) {
@@ -115,15 +116,18 @@ export class TranslationEngine {
     // Protect placeholders and pictographs without asking the model to reproduce sentinel tokens.
     const protectedParts = text.split(/([\r\n\t]+|\{\d+\}|\[\d+\]|\p{RI}\p{RI}|\p{Extended_Pictographic}(?:\uFE0F|\p{Emoji_Modifier})?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F|\p{Emoji_Modifier})?)*)/gu);
     const translated: string[] = [];
-    const recovery: GenerationRecovery = { remainingAttempts: MAX_RECOVERY_ATTEMPTS };
+    const recovery = newGenerationRecovery();
     for (let i = 0; i < protectedParts.length; i++) translated.push(i % 2 ? protectedParts[i] : await this.translatePlain(protectedParts[i], recovery));
     return translated.join('');
   }
-  private async translatePlain(text: string, recovery: GenerationRecovery = { remainingAttempts: MAX_RECOVERY_ATTEMPTS }, recoveryDepth = 0): Promise<string> {
+  private async translatePlain(text: string, recovery = newGenerationRecovery(), recoveryDepth = 0): Promise<string> {
     // 纯数字、标点和符号无需翻译，交给模型反而可能循环生成或改坏数值。
     if (!/[\p{L}\p{M}]/u.test(text)) return text;
     const match = /^(\s*)([\s\S]*?)(\s*)$/.exec(text)!;
     const [, before, content, after] = match;
+    // 只在本请求内复用完整生成的片段，避免重复文本耗尽恢复预算。
+    const completed = recovery.completed.get(content);
+    if (completed !== undefined) return before + completed + after;
     const ids = this.src!.encode(content);
     if (ids.length + 1 > this.tokenLimit || content.length > this.tokenLimit) {
       const sentences = [...new Intl.Segmenter(undefined, { granularity: 'sentence' }).segment(content)].map(s => s.segment);
@@ -139,7 +143,9 @@ export class TranslationEngine {
     }
     if (recoveryDepth > 0 && recovery.remainingAttempts-- <= 0) throw new GenerationLimitError();
     try {
-      return before + await this.translateEncoded(ids) + after;
+      const translated = await this.translateEncoded(ids);
+      recovery.completed.set(content, translated);
+      return before + translated + after;
     } catch (error) {
       if (!(error instanceof GenerationLimitError)) throw error;
       const parts = recoveryDepth < MAX_RECOVERY_DEPTH && recovery.remainingAttempts > 0 ? splitForRecovery(content) : undefined;
@@ -153,7 +159,9 @@ export class TranslationEngine {
       // 无空格源语言拆分后，非中日韩译文的相邻单词仍需分隔，避免粘连。
       const separator = this.options.targetLang && !isCJKCode(this.options.targetLang)
         && /[\p{L}\p{N}\p{Pe}\p{Pf}.!?;:。！？；：]$/u.test(left) && /^[\p{L}\p{N}]/u.test(right) ? ' ' : '';
-      return before + left + separator + right + after;
+      const translated = left + separator + right;
+      recovery.completed.set(content, translated);
+      return before + translated + after;
     }
   }
   private async translateEncoded(ids: number[]): Promise<string> {

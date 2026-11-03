@@ -55,9 +55,17 @@ test('irreducible generation failure remains an explicit error with bounded work
 });
 
 test('retry attempts are shared by sibling fragments instead of resetting on each split', async () => {
-  const { engine, attempts } = engineWithModel(s => s.length > 1);
-  await expect(engine.translateAsync('a'.repeat(64))).rejects.toThrow('Translation exceeded generation limit');
+  const { engine, attempts } = engineWithModel(s => Array.from(s).length > 2);
+  const text = Array.from({ length: 64 }, (_, i) => 'a' + String.fromCodePoint(0x300 + i)).join('');
+  await expect(engine.translateAsync(text)).rejects.toThrow('Translation exceeded generation limit');
   expect(attempts).toHaveLength(65);
+});
+
+test('identical completed fragments are reused only inside the current request', async () => {
+  const { engine, attempts } = engineWithModel(s => s.length > 12);
+  for (let i = 0; i < 2; i++) expect(await engine.translateAsync('alpha beta alpha beta')).toBe('ALPHA BETA ALPHA BETA');
+  expect(attempts.filter(s => s === 'alpha beta')).toHaveLength(2);
+  expect(attempts).toHaveLength(4);
 });
 
 test('backend faults are not retried as generation failures', async () => {
