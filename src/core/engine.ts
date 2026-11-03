@@ -152,7 +152,7 @@ export class TranslationEngine {
       const right = await this.translatePlain(parts[1], recovery, recoveryDepth + 1);
       // 无空格源语言拆分后，非中日韩译文的相邻单词仍需分隔，避免粘连。
       const separator = this.options.targetLang && !isCJKCode(this.options.targetLang)
-        && /[\p{L}\p{N}]$/u.test(left) && /^[\p{L}\p{N}]/u.test(right) ? ' ' : '';
+        && /[\p{L}\p{N}\p{Pe}\p{Pf}.!?;:。！？；：]$/u.test(left) && /^[\p{L}\p{N}]/u.test(right) ? ' ' : '';
       return before + left + separator + right + after;
     }
   }

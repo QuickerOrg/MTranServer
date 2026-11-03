@@ -54,12 +54,24 @@ test('irreducible generation failure remains an explicit error with bounded work
   expect(attempts.length).toBeLessThanOrEqual(65);
 });
 
+test('retry attempts are shared by sibling fragments instead of resetting on each split', async () => {
+  const { engine, attempts } = engineWithModel(s => s.length > 1);
+  await expect(engine.translateAsync('a'.repeat(64))).rejects.toThrow('Translation exceeded generation limit');
+  expect(attempts).toHaveLength(65);
+});
+
 test('backend faults are not retried as generation failures', async () => {
   const { engine, attempts } = engineWithModel(() => false);
   const run = mock(async () => { attempts.push('failed'); throw new Error('device unavailable'); });
   engine.session.run = run;
   await expect(engine.translateAsync('alpha beta gamma delta')).rejects.toThrow('device unavailable');
   expect(run).toHaveBeenCalledTimes(1);
+});
+
+test('recovered English fragments remain separated after sentence punctuation', async () => {
+  const { engine } = engineWithModel(s => s.length > 2);
+  engine.dst.decode = () => 'Done.';
+  expect(await engine.translateAsync('甲乙丙丁')).toBe('Done. Done.');
 });
 
 test('grapheme recovery keeps combining marks and surrogate pairs together', async () => {
