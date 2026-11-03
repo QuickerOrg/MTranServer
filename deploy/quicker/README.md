@@ -4,6 +4,8 @@
 
 初始化修复取消循环补齐首条请求的词元；性能探测允许模型输出触及有界生成上限，仍拒绝无效输出及后端执行错误。实际翻译继续要求 EOS，避免返回截断译文。未修改模型及转换算法。
 
+实际翻译达到生成上限时，按句子、词、字素边界逐步缩小失败片段，最多 6 层、每个文本节点至多 64 次额外推理。纯数字、标点、符号保留原文，换行、制表符与占位符不送入模型。只有完整生成的片段才能组成结果；无法恢复时整体失败，自动语言检测路径也不会把失败片段原文混入成功结果。缩小上下文可能影响译文连贯性，不代表全面翻译质量保证。
+
 ## 构建与验证
 
 ```text
@@ -11,7 +13,7 @@ bun install --frozen-lockfile --ignore-scripts
 cd ui
 bun install --frozen-lockfile --ignore-scripts
 cd ..
-bun test tests/engine-initialization.test.ts tests/backend.test.ts tests/engine-html.test.ts tests/quicker-compatibility.test.ts
+bun test tests/engine-initialization.test.ts tests/backend.test.ts tests/engine-html.test.ts tests/quicker-compatibility.test.ts tests/generation-recovery.test.ts tests/generation-service.test.ts
 bun run typecheck
 bun run build:node
 ```
@@ -30,7 +32,7 @@ Docker 构建上下文为仓库根目录，使用 `deploy/quicker/Dockerfile`。
 - 部署前备份容器配置、Compose 与镜像 ID；使用验证通过的同一镜像替换正式容器。
 - 保留旧镜像、旧模型及旧版 8989 服务。若部署后复查失败，恢复旧 Compose/镜像并复查健康状态与翻译。
 
-本次范围仅修复初始化探测。实际输入导致模型循环生成的处理属于后续独立问题，不能通过忽略实际翻译 EOS 检查来掩盖。
+初始化探测与实际翻译使用不同的 EOS 规则。实际翻译只能通过有限分段恢复，不能通过忽略 EOS 检查返回截断译文。
 
 ## 2026-11-03 验证与部署结果
 

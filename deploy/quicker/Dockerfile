@@ -6,4 +6,4 @@ COPY dist/ /app/
 RUN node --check /app/main.js
 LABEL org.opencontainers.image.source="https://github.com/QuickerOrg/MTranServer" \
       org.opencontainers.image.revision="${SOURCE_REVISION}" \
-      quicker.fixes="bounded-initialization-probe,norwegian-aliases,bad-request-status"
+      quicker.fixes="bounded-initialization-probe,bounded-generation-recovery,norwegian-aliases,bad-request-status"
